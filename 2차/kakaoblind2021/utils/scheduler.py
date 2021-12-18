@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from kakaoblind2021 import settings
+
 from model_utils import Choices
 
 SERVER_STATUS = Choices(
@@ -25,36 +26,47 @@ truck_command_dict = {
 
 
 class KakaoTScheduler(object):
-    def __init__(self, problem, rental, truck_mode, commands):
-        self.problem = problem
-        self.runtime = 0
+    def __init__(self):
+        self.scenario = 0                   # 시나리오 idx
+        self.problem = None                 # 서버 시나리오
+        self.runtime = 0                    # 서버 수행시간
         self.scheduler = BackgroundScheduler()
-        self.server_status = SERVER_STATUS.in_progress
+        self.server_status = SERVER_STATUS.initial  # 서버 상태 (initial, in_progress, ready, finished)
 
-        self.rental = rental                # 자전거 대여 요청 처리 대기열
+        self.rental = None                  # 자전거 대여 요청 처리 대기열
         self.back = {}                      # 자전거 반납 처리 대기열
         self.total_bike_req_count = 0       # 자전거 대여 전체 요청
         self.failed_bike_req_count = 0      # 자전거 대여 실패 요청
 
-        self.truck_mode = truck_mode        # 트럭 요청 수행 여부(True/False)
-        self.commands = commands            # 트럭 이동 명령어열
+        self.commands = None                # 트럭 이동 명령어열
         self.truck_movement_dist = 0        # 트럭 이동 거리
         self.total_truck_req_count = 0      # 트럭 이동 전체 요청
         self.failed_truck_req_count = 0     # 트럭 이동 실패 요청
+
+        self.score = 0.0
 
     def __del__(self):
         self.terminate_scheduler()
 
     def terminate_scheduler(self):
-        self.scheduler.shutdown()
+        if self.scheduler.running:
+            self.scheduler.shutdown()
 
-    def init_scheduler(self):
-        print(self.rental)
+    def init_scheduler(self, scenario):
+        self.scenario = scenario
         self.scheduler.start()
-        self.scheduler.add_job(self.set_server_status_scheduler, "cron", second="*/1", id="server_status")
-        self.scheduler.add_job(self.bike_scheduler, "cron", second="*/1", id="bike")
-        if self.truck_mode:
-            self.scheduler.add_job(self.truck_scheduler, "cron", second="*/1", id="truck")
+        self.server_status = SERVER_STATUS.in_progress
+        self.scheduler.add_job(self.set_server_status_scheduler, "cron", minute="*/1", id="server_status")
+
+    def set_server_scenario_score(self):
+        self.problem.score.score = self.score
+        self.problem.score.status = self.server_status
+        self.problem.score.save()
+
+    def calc_scenario_score(self):
+        self.score = 0.0
+        s = self.total_bike_req_count + self.total_truck_req_count      # 사용자의 총 대여 요청 수
+        _s = self.total_bike_req_count - self.failed_bike_req_count     # 트럭이 아무것도 하지 않았을 때 시나리오에서 성공하는 요청 수
 
     def set_server_status_scheduler(self):
         bike_success = (self.total_bike_req_count - self.failed_bike_req_count)
@@ -62,6 +74,18 @@ class KakaoTScheduler(object):
         # 서버가 수행한 simulate 요청이 720번 성공한 경우, 서버의 상태를 finished로 변경, 점수 계산
         if bike_success + truck_success >= 720:
             self.server_status = SERVER_STATUS.finished
+            self.calc_scenario_score()
+            self.set_server_scenario_score()
+
+    def add_bike_scheduler(self, problem, rental):
+        self.problem = problem
+        self.rental = rental
+        self.scheduler.add_job(self.bike_scheduler, "cron", minute="*/1", id="bike")
+
+    def add_truck_scheduler(self, commands):
+        # 트럭이 행할 명령(현재 시각 ~ 현재 시각+1분)이 들어오는 경우, 함수로 요청 수행
+        self.commands = commands
+        self.truck_scheduler()
 
     def bike_scheduler(self):
         loc_set = self.problem.location_set.all()
@@ -119,28 +143,27 @@ class KakaoTScheduler(object):
 
         print("사용자의 총 대여 요청 수: " + str(self.total_bike_req_count))
         print("트럭이 아무것도 안했을 때 시나리오에서 성공하는 요청 수:" + str(self.total_bike_req_count-self.failed_bike_req_count))
+        print("============ BIKE END ============")
 
     def truck_scheduler(self):
-        size = getattr(settings, 'problem')[self.problem.idx]   # 대여소의 크기
+        size = getattr(settings, 'problem')[str(self.problem.idx)]['size']   # 대여소의 크기
         truck_set = self.problem.truck_set.all()
         # ID가 낮은 트럭의 명령순으로 정렬
-        c_queue = self.commands.sort(key=lambda x: x[0])
+        c_queue = sorted(self.commands, key=lambda x: x['truck_id'])
 
         print("============ TRUCK SCHEDULER ============")
         print('서버시간: ' + str(self.runtime))
 
         for q in c_queue:
-            print("요청1 : " + str(q))
             t_idx, command = q['truck_id'], q['command']
             t = truck_set.get(idx=t_idx)
             # 'truck_id'를 ID로 가지는 트럭의 행(t_row), 열(t_row), 현재 위치(loc_idx)
             t_row, t_col, t_loc_idx = t.loc_row, t.loc_col, t.loc_idx
-            print(f'truck은 현재 [{t_row}][{t_col}]: {t_loc_idx} 위치에 있으며 잔여 자젼거는 {t.bikes}대')
+            print(f'truck은 현재 [{t_row}][{t_col}]: {t_loc_idx} 위치에 있으며 잔여 자젼거는 {t.bikes}대\n')
             for i, c in enumerate(command):
                 # 트럭에게 내릴 수 있는 최대 명령 수(10개)를 초과하면, 그 이상은 실행하지 않음
                 if i >= 10:
                     break
-                print(f'{truck_command_dict[c]}', end=' ')
                 self.total_truck_req_count += 1
                 # 트럭이 6초간 아무것도 하지 않는 경우
                 if c == 0:
@@ -153,7 +176,8 @@ class KakaoTScheduler(object):
                     t.loc_col = t_col
                 # 트럭이 자전거 상, 하차 명령을 수행하는 경우
                 else:
-                    bike = self.problem.location_set.get(idx=t_idx)
+                    # bike = self.problem.location_set.get(idx=t_idx)
+                    bike = self.problem.location_set.get(idx=t_loc_idx)
                     if c == 5 and bike.bike > 0:
                         t.bikes += 1
                         bike.bike -= 1
@@ -166,14 +190,19 @@ class KakaoTScheduler(object):
                     else:
                         self.failed_truck_req_count += 1
                 t.save()
-                print(f'  -> loc_idx: {t_loc_idx}, row: {t_row}, col: {t_col}, bikes: {t.bikes}')
+                print(f'{truck_command_dict[c]} -> loc_idx: {t_loc_idx}, row: {t_row}, col: {t_col}, bikes: {t.bikes}')
+
+        # 처리한 트럭 이동 요청 대기열 비우기
+        self.commands = None
 
         response = {
             "status": self.server_status,
             "time": self.runtime,
-            "failed_request_count": self.failed_bike_req_count + self.failed_truck_req_count,
+            "failed_request_count": self.failed_bike_req_count,
             "distance": self.truck_movement_dist / 1000
         }
+        print(response)
+        print("============ TRUCK END ============")
         return Response(response, status=status.HTTP_200_OK)
 
     def truck_movement(self, size=None, t_loc_idx=None, t_row=None, t_col=None, command=None):
