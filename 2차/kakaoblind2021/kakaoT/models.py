@@ -1,7 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 
-from utils.scheduler import SERVER_STATUS
+import utils.scheduler as scheduler
 
 
 class Problem(models.Model):
@@ -55,8 +55,8 @@ class Score(models.Model):
         verbose_name='problem'
     )
     status = models.CharField(
-        choices=SERVER_STATUS,
-        default=SERVER_STATUS.initial,
+        choices=scheduler.SERVER_STATUS,
+        default=scheduler.SERVER_STATUS.initial,
         max_length=20
     )
     score = models.FloatField(default=0.0)
