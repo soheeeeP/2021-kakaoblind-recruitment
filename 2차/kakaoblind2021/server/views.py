@@ -50,7 +50,6 @@ class SimulateView(generics.CreateAPIView):
 
         # 자전거 대여 요청 수행
         kakao.add_bike_scheduler(problem=p, rental=rental_req_data)
-        kakao.set_server_scenario_score()
 
         commands = request.POST.get('commands', None)
         if commands:    # 트럭 이동 요청이 들어온 경우
@@ -59,7 +58,7 @@ class SimulateView(generics.CreateAPIView):
         response = {
             "status": kakao.server_status,
             "time": kakao.runtime,
-            "failed_requests_count": kakao.failed_bike_req_count + kakao.failed_truck_req_count,
-            "distance": kakao.truck_movement_dist / 1000
+            "failed_requests_count": kakao.failed_req_count,
+            "distance": kakao.actual_truck_movement_dist
         }
         return Response(response, status=status.HTTP_200_OK)
