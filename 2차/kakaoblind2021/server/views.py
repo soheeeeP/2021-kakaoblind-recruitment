@@ -58,7 +58,11 @@ class SimulateView(generics.CreateAPIView):
 
         # TODO: requests 예외 처리(404)
         req_url = self.base_url + str(idx) + "_day-1.json"
-        rental_req_data = requests.get(req_url).json()
+        req_status = requests.get(req_url).ok
+        if req_status:
+            rental_req_data = requests.get(req_url).json()
+        else:
+            rental_req_data = test_data
 
         kakao.init_scheduler(problem=p, truck_problem=self.create_truck_dummy_data(p=p), scenario=p.idx)
         kakao.add_server_status_scheduler()
