@@ -76,7 +76,6 @@ class KakaoTScheduler(object):
             self.calc_server_score()
 
     def calc_server_score(self):
-        # TODO: 트럭이 이동하는 경우, 이동하지 않는 경우의 req_count를 구분해야 한다
         S = self.total_req_count  # 사용자의 총 대여 요청 수
         _S = self.total_req_count - self.failed_req_count  # 트럭이 아무것도 안했을 때 시나리오에서 성공하는 요청 수
         x = self.truck_total_req_count - self.truck_failed_req_count  # 트럭이 이동할 때 시나리오에서 성공하는 요청 수

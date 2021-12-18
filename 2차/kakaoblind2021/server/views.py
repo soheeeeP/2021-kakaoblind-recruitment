@@ -17,7 +17,6 @@ class SimulateView(generics.CreateAPIView):
         super().__init__(**kwargs)
         self.base_url = "https://grepp-cloudfront.s3.ap-northeast-2.amazonaws.com/programmers_imgs/competition-imgs/2021kakao/problem"
 
-    # TODO: truck dummy data 생성
     def create_truck_dummy_data(self, p) -> typing.Optional[Problem]:
         import uuid
         truck_problem = Problem.objects.create(idx=3, auth_key=uuid.uuid4())
@@ -56,7 +55,6 @@ class SimulateView(generics.CreateAPIView):
         elif kakao.server_status == SERVER_STATUS.in_progress or kakao.server_status == SERVER_STATUS.ready:
             return Response({'message': 'REQUEST IS IN PROGRESS... '}, status=status.HTTP_400_BAD_REQUEST)
 
-        # TODO: requests 예외 처리(404)
         req_url = self.base_url + str(idx) + "_day-1.json"
         req_status = requests.get(req_url).ok
         if req_status:
