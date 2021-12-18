@@ -40,7 +40,7 @@ class StartView(generics.CreateAPIView):
 
             truck_set = p.truck_set.all()
             for t in truck_set.iterator():
-                t.loc_row, t.loc_col, t.loc_idx, t.bikes = 0, 0, 0, 0
+                t.loc_row, t.loc_col, t.loc_idx, t.bikes = size, 1, 0, 0
                 t.save()
 
             score = p.score
@@ -76,7 +76,8 @@ class StartView(generics.CreateAPIView):
                 for i in range(truck):
                     Truck.objects.create(
                         problem_id=p.id,
-                        idx=idx
+                        idx=idx,
+                        loc_row=size
                     )
                     idx += 1
                 Score.objects.create(problem=p)

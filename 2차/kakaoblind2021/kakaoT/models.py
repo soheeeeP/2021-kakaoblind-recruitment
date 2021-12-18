@@ -50,7 +50,7 @@ class Truck(models.Model):
         default=0
     )
     loc_row = models.PositiveSmallIntegerField(default=0)
-    loc_col = models.PositiveSmallIntegerField(default=0)
+    loc_col = models.PositiveSmallIntegerField(default=1)
     loc_idx = models.PositiveSmallIntegerField(default=0)
     bikes = models.PositiveSmallIntegerField(default=0)
 
