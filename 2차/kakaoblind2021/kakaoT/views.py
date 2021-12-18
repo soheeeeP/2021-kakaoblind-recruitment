@@ -5,7 +5,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 
 from kakaoblind2021 import settings
-from kakaoT.models import Problem, Location, Truck
+from kakaoT.models import Problem, Location, Truck, Score
+from utils.scheduler import SERVER_STATUS
 
 
 class StartView(generics.CreateAPIView):
@@ -24,7 +25,7 @@ class StartView(generics.CreateAPIView):
 
         try:
             # 다시 같은 시나리오를 simulate하는 경우
-            p = Problem.objects.prefetch_related('location_set', 'truck_set').get(idx=idx)
+            p = Problem.objects.prefetch_related('location_set', 'truck_set', 'score').get(idx=idx)
             # 새로운 auth_key 발급
             p.auth_key = uuid.uuid4()
 
@@ -40,8 +41,13 @@ class StartView(generics.CreateAPIView):
 
             truck_set = p.truck_set.all()
             for t in truck_set.iterator():
-                t.loc_row, t.loc_col, t.loc_idx, t.bikes = 0, 0, 0, 0
+                t.loc_row, t.loc_col, t.loc_idx, t.bikes = size, 1, 0, 0
                 t.save()
+
+            score = p.score
+            score.score, score.status = 0.0, SERVER_STATUS.initial
+            score.save()
+
             p.save()
 
         except Problem.DoesNotExist:
@@ -71,9 +77,11 @@ class StartView(generics.CreateAPIView):
                 for i in range(truck):
                     Truck.objects.create(
                         problem_id=p.id,
-                        idx=idx
+                        idx=idx,
+                        loc_row=size
                     )
                     idx += 1
+                Score.objects.create(problem=p)
         finally:
             response = {
                 "auth_key": p.auth_key,
@@ -120,3 +128,15 @@ class TruckView(generics.RetrieveAPIView):
                 "located_bikes_cnt": truck.bikes
             })
         return Response({"trucks": data}, status=status.HTTP_200_OK)
+
+
+class ScoreView(generics.RetrieveAPIView):
+    def get(self, request, *args, **kwargs):
+        auth_key = request.META.get('HTTP_AUTHORIZATION')
+        try:
+            s = Score.objects.get(problem__auth_key=auth_key)
+        except Score.DoesNotExist:
+            message = "INVALID AUTH_KEY ERROR"
+            return Response({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"score": s.score}, status=status.HTTP_200_OK)

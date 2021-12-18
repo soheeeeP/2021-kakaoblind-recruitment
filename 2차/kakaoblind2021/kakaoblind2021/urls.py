@@ -25,4 +25,5 @@ urlpatterns = [
     path('locations', LocationView.as_view(), name="locations"),
     path('trucks', TruckView.as_view(), name="truck"),
     path('simulate', SimulateView.as_view(), name="simulate"),
+    path('score', ScoreView.as_view(), name="score"),
 ]

@@ -1,14 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 
-from model_utils import Choices
-
-SERVER_STATUS = Choices(
-    ('initial', 'initial'),
-    ('in_progress', 'in_progress'),
-    ('ready', 'ready'),
-    ('finished', 'finished')
-)
+import utils.scheduler as scheduler
 
 
 class Problem(models.Model):
@@ -50,7 +43,7 @@ class Truck(models.Model):
         default=0
     )
     loc_row = models.PositiveSmallIntegerField(default=0)
-    loc_col = models.PositiveSmallIntegerField(default=0)
+    loc_col = models.PositiveSmallIntegerField(default=1)
     loc_idx = models.PositiveSmallIntegerField(default=0)
     bikes = models.PositiveSmallIntegerField(default=0)
 
@@ -62,8 +55,8 @@ class Score(models.Model):
         verbose_name='problem'
     )
     status = models.CharField(
-        choices=SERVER_STATUS,
-        default=SERVER_STATUS.initial,
+        choices=scheduler.SERVER_STATUS,
+        default=scheduler.SERVER_STATUS.initial,
         max_length=20
     )
     score = models.FloatField(default=0.0)
