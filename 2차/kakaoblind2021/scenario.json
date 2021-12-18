@@ -1,0 +1,26 @@
+{
+  "X_AUTH_TOKEN": "170cd6377c41574b2b115e95e6f7de23",
+  "problem": {
+    "0" : {
+      "size" : 2,
+      "bike" : 4,
+      "truck" : 4
+    },
+    "1" : {
+      "size" : 5,
+      "bike" : 100,
+      "truck" : 5,
+      "total_req" : 1428,
+      "success_req_no_truck" : 1077,
+      "truck_dist" : 3600
+    },
+    "2" : {
+      "size" : 60,
+      "bike" : 10800,
+      "truck" : 10,
+      "total_req" : 10829,
+      "success_req_no_truck" : 9142,
+      "truck_dist" : 7200
+    }
+  }
+}
