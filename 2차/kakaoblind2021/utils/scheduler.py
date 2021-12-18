@@ -3,9 +3,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from rest_framework import status
 from rest_framework.response import Response
 
-from kakaoT.models import SERVER_STATUS
 from kakaoblind2021 import settings
+from model_utils import Choices
 
+SERVER_STATUS = Choices(
+    ('initial', 'initial'),
+    ('in_progress', 'in_progress'),
+    ('ready', 'ready'),
+    ('finished', 'finished')
+)
 
 truck_command_dict = {
     0: '6초간 아무것도 하지 않음',

@@ -5,7 +5,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 
 from kakaoblind2021 import settings
-from kakaoT.models import Problem, Location, Truck, Score, SERVER_STATUS
+from kakaoT.models import Problem, Location, Truck, Score
+from utils.scheduler import SERVER_STATUS
 
 
 class StartView(generics.CreateAPIView):

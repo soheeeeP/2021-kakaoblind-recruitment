@@ -1,14 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 
-from model_utils import Choices
-
-SERVER_STATUS = Choices(
-    ('initial', 'initial'),
-    ('in_progress', 'in_progress'),
-    ('ready', 'ready'),
-    ('finished', 'finished')
-)
+from utils.scheduler import SERVER_STATUS
 
 
 class Problem(models.Model):
