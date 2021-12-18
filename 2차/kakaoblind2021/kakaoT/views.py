@@ -18,6 +18,10 @@ class StartView(generics.CreateAPIView):
         idx = request.query_params.get('problem')
         scenario = getattr(settings, 'problem')[idx]
 
+        # 대여소 생성 (row, col, id, 자전거 대수)
+        size = scenario['size']
+        bike = scenario['bike'] / (size ** 2)
+
         try:
             # 다시 같은 시나리오를 simulate하는 경우
             p = Problem.objects.prefetch_related('location_set', 'truck_set').get(idx=idx)
@@ -25,8 +29,19 @@ class StartView(generics.CreateAPIView):
             p.auth_key = uuid.uuid4()
 
             # Problem을 참조하고 있는 Place와 Truck object 삭제
-            p.location_set.all().delete()
-            p.truck_set.all().delete()
+            # p.location_set.all().delete()
+            # p.truck_set.all().delete()
+
+            # Problem을 참조하고 있는 Place와 Truck object의 데이터 초기화
+            loc_set = p.location_set.all()
+            for l in loc_set.iterator():
+                l.bike = bike
+                l.save()
+
+            truck_set = p.truck_set.all()
+            for t in truck_set.iterator():
+                t.loc_row, t.loc_col, t.loc_idx, t.bikes = 0, 0, 0, 0
+                t.save()
             p.save()
 
         except Problem.DoesNotExist:
@@ -38,9 +53,6 @@ class StartView(generics.CreateAPIView):
                     auth_key=uuid.uuid4()
                 )
 
-                # 대여소 생성 (row, col, id, 자전거 대수)
-                size = scenario['size']
-                bike = scenario['bike'] / (size ** 2)
                 idx = 0
                 for i in range(1, size + 1, 1):
                     for j in range(size, 0, -1):

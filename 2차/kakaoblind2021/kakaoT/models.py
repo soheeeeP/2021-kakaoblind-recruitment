@@ -1,6 +1,15 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 
+from model_utils import Choices
+
+SERVER_STATUS = Choices(
+    ('initial', 'initial'),
+    ('in_progress', 'in_progress'),
+    ('ready', 'ready'),
+    ('finished', 'finished')
+)
+
 
 class Problem(models.Model):
     idx = models.PositiveSmallIntegerField()
@@ -44,3 +53,17 @@ class Truck(models.Model):
     loc_col = models.PositiveSmallIntegerField(default=0)
     loc_idx = models.PositiveSmallIntegerField(default=0)
     bikes = models.PositiveSmallIntegerField(default=0)
+
+
+class Score(models.Model):
+    problem = models.OneToOneField(
+        Problem,
+        on_delete=models.CASCADE,
+        verbose_name='problem'
+    )
+    status = models.CharField(
+        choices=SERVER_STATUS,
+        default=SERVER_STATUS.initial,
+        max_length=20
+    )
+    score = models.FloatField(default=0.0)
