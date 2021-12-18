@@ -88,3 +88,23 @@ class LocationView(generics.RetrieveAPIView):
                 "located_bikes_count": loc.bike
             })
         return Response({"locations": data}, status=status.HTTP_200_OK)
+
+
+class TruckView(generics.RetrieveAPIView):
+    def get(self, request, *args, **kwargs):
+        auth_key = request.META.get('HTTP_AUTHORIZATION')
+        try:
+            p = Problem.objects.prefetch_related('truck_set').get(auth_key=auth_key)
+        except Problem.DoesNotExist:
+            message = "INVALID AUTH_KEY ERROR"
+            return Response({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = []
+        trucks = p.truck_set.all()
+        for truck in trucks.iterator():
+            data.append({
+                "id": truck.idx,
+                "location_id": truck.loc_idx,
+                "located_bikes_cnt": truck.bikes
+            })
+        return Response({"trucks": data}, status=status.HTTP_200_OK)

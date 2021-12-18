@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('start', StartView.as_view(), name="start"),
     path('locations', LocationView.as_view(), name="locations"),
+    path('trucks', TruckView.as_view(), name="truck"),
 ]
