@@ -126,3 +126,21 @@ class TruckView(generics.RetrieveAPIView):
                 "located_bikes_cnt": truck.bikes
             })
         return Response({"trucks": data}, status=status.HTTP_200_OK)
+
+
+class ScoreView(generics.RetrieveAPIView):
+    def get(self, request, *args, **kwargs):
+        auth_key = request.META.get('HTTP_AUTHORIZATION')
+        try:
+            s = Score.objects.get(problem__auth_key=auth_key)
+        except Score.DoesNotExist:
+            message = "INVALID AUTH_KEY ERROR"
+            return Response({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        if s.status != SERVER_STATUS.finished:
+            score = 0.0
+        else:
+            score = s.score
+
+        response = {"score": score}
+        return Response(response, status=status.HTTP_200_OK)
