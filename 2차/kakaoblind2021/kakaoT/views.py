@@ -69,3 +69,22 @@ class StartView(generics.CreateAPIView):
                 "time": 0
             }
             return Response(response, status=status.HTTP_201_CREATED)
+
+
+class LocationView(generics.RetrieveAPIView):
+    def get(self, request, *args, **kwargs):
+        auth_key = request.META.get('HTTP_AUTHORIZATION')
+        try:
+            p = Problem.objects.prefetch_related('location_set').get(auth_key=auth_key)
+        except Problem.DoesNotExist:
+            message = "INVALID AUTH_KEY ERROR"
+            return Response({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = []
+        locations = p.location_set.all()
+        for loc in locations.iterator():
+            data.append({
+                "id": loc.idx,
+                "located_bikes_count": loc.bike
+            })
+        return Response({"locations": data}, status=status.HTTP_200_OK)
