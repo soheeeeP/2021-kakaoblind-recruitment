@@ -1,13 +1,12 @@
 import json
 import requests
-from enum import Enum
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from django.db import transaction
 from rest_framework import generics, status
 from rest_framework.response import Response
 
-from kakaoT.models import Problem
+from kakaoT.models import Problem, SERVER_STATUS
 from kakaoblind2021 import settings
 
 
@@ -22,19 +21,12 @@ truck_command_dict = {
 }
 
 
-class ServerStatus(Enum):
-    INITIAL = 'INITIAL'
-    IN_PROGRESS = 'IN_PROGRESS'
-    READY = 'READY'
-    FINISHED = 'FINISHED'
-
-
 class KakaoTScheduler(object):
     def __init__(self, problem, rental, truck_mode, commands):
         self.problem = problem
         self.runtime = 0
         self.scheduler = BackgroundScheduler()
-        self.server_status = ServerStatus.IN_PROGRESS.name
+        self.server_status = SERVER_STATUS.in_progress
 
         self.rental = rental                # 자전거 대여 요청 처리 대기열
         self.back = {}                      # 자전거 반납 처리 대기열
@@ -66,7 +58,7 @@ class KakaoTScheduler(object):
         truck_success = (self.total_truck_req_count - self.failed_truck_req_count)
         # 서버가 수행한 simulate 요청이 720번 성공한 경우, 서버의 상태를 finished로 변경, 점수 계산
         if bike_success + truck_success >= 720:
-            self.server_status = ServerStatus.FINISHED.name
+            self.server_status = SERVER_STATUS.finished
 
     def bike_scheduler(self):
         loc_set = self.problem.location_set.all()
@@ -105,8 +97,8 @@ class KakaoTScheduler(object):
                 else:
                     loc.bike -= 1
                     loc.save()
-                    if self.server_status == ServerStatus.IN_PROGRESS.name:
-                        self.server_status = ServerStatus.READY.name
+                    if self.server_status == SERVER_STATUS.in_progress:
+                        self.server_status = SERVER_STATUS.ready
 
                     # 반납시간 계산
                     return_time = self.runtime + d[2]
