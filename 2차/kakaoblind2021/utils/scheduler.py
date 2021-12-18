@@ -39,6 +39,15 @@ class KakaoTScheduler(object):
         self.total_req_count = 0            # 자전거 대여 전체 요청 (트럭 이동 유무와 관계 없는 값, 하나의 시나리오에 대하여 고정된 값을 가짐)
         self.failed_req_count = 0           # 자전거 대여 실패 요청 (트럭 이동 유무에 따라 달라지는 값)
 
+        self.truck_mode = False
+        self.truck_cnt = 0
+        self.truck_problem = None
+        self.truck_runtime = 0
+        self.truck_rental = None
+        self.truck_back = {}
+        self.truck_total_req_count = 0
+        self.truck_failed_req_count = 0
+
         self.commands = None                # 트럭 이동 명령어열
         self.total_truck_movement_dist = 0  # 트럭이 쉬지 않고 달린다고 가정할 때의 거리의 합
         self.actual_truck_movement_dist = 0 # 트럭 이동 거리
@@ -52,17 +61,18 @@ class KakaoTScheduler(object):
         if self.scheduler.running:
             self.scheduler.shutdown()
 
-    def init_scheduler(self, scenario):
+    def init_scheduler(self, problem, truck_problem, scenario):
+        self.problem = problem
+        self.truck_problem = truck_problem
         self.scenario = scenario
         self.scheduler.start()
-        self.server_status = SERVER_STATUS.in_progress
-        self.scheduler.add_job(self.set_server_status_scheduler, "cron", second="*/1", id="server_status")
 
     def set_server_status_scheduler(self):
         # 서버가 수행한 simulate 요청이 720번 성공한 경우, 서버의 상태를 finished로 변경
         if self.total_req_count - self.failed_req_count >= 720:
             self.server_status = SERVER_STATUS.finished
-            self.total_truck_movement_dist = self.total_req_count * self.size
+            # 모든 트럭이 달린 거리의 합(km) = (총 대여 요청 수) * (트럭 대수) * 1km(한 칸의 너비 * 명령 10개)
+            self.total_truck_movement_dist = self.total_req_count * self.truck_cnt * 1
             self.calc_server_score()
 
     def calc_server_score(self):
@@ -78,21 +88,30 @@ class KakaoTScheduler(object):
         self.problem.score.status = self.server_status
         self.problem.score.save()
 
-    def add_bike_scheduler(self, problem, rental):
-        self.problem = problem
+    def add_server_status_scheduler(self):
+        _settings = getattr(settings, 'problem')[str(self.problem.idx)]
+        self.truck_cnt = _settings['truck']     # 트럭 수
+        self.size = _settings['size']           # 대여소의 크기
+        self.server_status = SERVER_STATUS.in_progress
+        self.scheduler.add_job(self.set_server_status_scheduler, "cron", second="*/10", id="server_status")
+
+    def add_scheduler(self, rental):
         self.rental = rental
-        self.size = getattr(settings, 'problem')[str(self.problem.idx)]['size']   # 대여소의 크기
-        self.scheduler.add_job(self.bike_scheduler, "cron", second="*/1", id="bike")
+        self.scheduler.add_job(self.default_scheduler, "cron", second="*/10", id="default")
+
+        self.truck_mode = True
+        self.truck_rental = self.rental
+        self.scheduler.add_job(self.jordy_version_scheduler, "cron", second="*/10", id="jordy")
 
     def add_truck_scheduler(self, commands):
         # 트럭이 행할 명령(현재 시각 ~ 현재 시각+1분)이 들어오는 경우, 함수로 요청 수행
         self.commands = commands
         self.truck_scheduler()
 
-    def bike_scheduler(self):
+    def default_scheduler(self):
         loc_set = self.problem.location_set.all()
 
-        print("============ BIKE SCHEDULER ============")
+        print("============ DEFAULT SCHEDULER ============")
         print('서버시간: ' + str(self.runtime))
 
         print('반납 처리 대기열: ', end='')
@@ -145,7 +164,65 @@ class KakaoTScheduler(object):
 
         print("사용자의 총 대여 요청 수: " + str(self.total_req_count))
         print("트럭이 아무것도 안했을 때 시나리오에서 성공하는 요청 수:" + str(self.total_req_count-self.failed_req_count))
-        print("============ BIKE END ============")
+        print("============ DEFAULT END ============")
+
+    def jordy_version_scheduler(self):
+        loc_set = self.truck_problem.location_set.all()
+
+        print("============ JORDY SCHEDULER ============")
+        print('서버시간: ' + str(self.truck_runtime))
+
+        print('반납 처리 대기열: ', end='')
+        print(self.truck_back)
+
+        # 현재 시간에 예정되어 있는 자전거 반납 처리
+        if self.truck_runtime in self.truck_back:
+            back_idx = self.truck_back[self.truck_runtime]
+            for b in back_idx:
+                loc = loc_set.get(idx=b)
+                loc.bike += 1  # 반납할 대여소에 자전거 반납
+                loc.save()
+            # 반납 대기열에서 제거
+            self.truck_back.pop(self.truck_runtime)
+
+        if str(self.truck_runtime) in self.truck_rental:
+            data = self.truck_rental[str(self.truck_runtime)]
+            self.truck_total_req_count += len(data)
+            print('처리할 요청: ', end='')
+            print(data)
+
+            # 자전거 대여 요청 처리
+            for d in data:
+                # [자전거를 대여할 대여소 ID, 자전거를 반납할 대여소 ID, 이용시간(분)]
+                loc = loc_set.get(idx=d[0])
+
+                # 대여소에 자전거가 남아있지 않는 경우, 요청 실패 처리
+                if loc.bike < 1:
+                    self.truck_failed_req_count += 1
+                # 대여소에 자전거가 1대 이상 남아있는 경우, 자전거 대여
+                else:
+                    loc.bike -= 1
+                    loc.save()
+                    if self.server_status == SERVER_STATUS.in_progress:
+                        self.server_status = SERVER_STATUS.ready
+
+                    # 반납시간 계산
+                    return_time = self.truck_runtime + d[2]
+                    print(f'ID {loc.idx}에서 자전거 대여. {return_time}분에 ID {d[1]}인 자전거 대여소에 반납 예정')
+                    print(f'ID {loc.idx}에는 자전거 {loc.bike}대가 남음')
+                    # 자전거 반납 대기열에 추가
+                    if return_time not in self.truck_back:
+                        self.truck_back[return_time] = [d[1]]
+                    else:
+                        self.truck_back[return_time].append(d[1])
+        print('취소된 요청 수: ' + str(self.truck_failed_req_count))
+
+        # 서버 실행 시간 업데이트
+        self.truck_runtime += 1
+
+        print("사용자의 총 대여 요청 수: " + str(self.truck_total_req_count))
+        print("트럭이 이동했을 때 시나리오에서 성공하는 요청 수:" + str(self.truck_total_req_count - self.truck_failed_req_count))
+        print("============ JORDY END ============")
 
     def truck_scheduler(self):
         truck_set = self.problem.truck_set.all()
@@ -176,8 +253,7 @@ class KakaoTScheduler(object):
                     t.loc_col = t_col
                 # 트럭이 자전거 상, 하차 명령을 수행하는 경우
                 else:
-                    # bike = self.problem.location_set.get(idx=t_idx)
-                    bike = self.problem.location_set.get(idx=t_loc_idx)
+                    bike = self.truck_problem.location_set.get(idx=t_loc_idx)
                     if c == 5 and bike.bike > 0:
                         t.bikes += 1
                         bike.bike -= 1
@@ -197,8 +273,8 @@ class KakaoTScheduler(object):
 
         response = {
             "status": self.server_status,
-            "time": self.runtime,
-            "failed_request_count": self.failed_req_count,
+            "time": self.truck_runtime,
+            "failed_request_count": self.truck_failed_req_count,
             "distance": self.actual_truck_movement_dist
         }
         print(response)
@@ -208,19 +284,19 @@ class KakaoTScheduler(object):
     def truck_movement(self, size=None, t_loc_idx=None, t_row=None, t_col=None, command=None):
         # 위로 한 칸 이동
         if command == 1 and 1 <= t_row - 1 <= size:
-            self.actual_truck_movement_dist += 0.1
+            self.actual_truck_movement_dist += 100
             return t_loc_idx + 1, t_row - 1, t_col
         # 오른쪽으로 한 칸 이동
         elif command == 2 and 1 <= t_col + 1 <= size:
-            self.actual_truck_movement_dist += 0.1
+            self.actual_truck_movement_dist += 100
             return t_loc_idx + size, t_row, t_col + 1
         # 아래로 한 칸 이동
         elif command == 3 and 1 <= t_row + 1 <= size:
-            self.actual_truck_movement_dist += 0.1
+            self.actual_truck_movement_dist += 100
             return t_loc_idx - 1, t_row + 1, t_col
         # 왼쪽으로 한 칸 이동
         elif command == 4 and 1 <= t_col - 1 <= size:
-            self.actual_truck_movement_dist += 0.1
+            self.actual_truck_movement_dist += 100
             return t_loc_idx - size, t_row, t_col - 1
         # 서비스 지역을 벗어나는 명령인 경우
         else:
