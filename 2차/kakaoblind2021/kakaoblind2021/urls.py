@@ -17,10 +17,12 @@ from django.contrib import admin
 from django.urls import path
 
 from kakaoT.views import *
+from server.views import SimulateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('start', StartView.as_view(), name="start"),
     path('locations', LocationView.as_view(), name="locations"),
     path('trucks', TruckView.as_view(), name="truck"),
+    path('simulate', SimulateView.as_view(), name="simulate"),
 ]
