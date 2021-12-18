@@ -139,10 +139,4 @@ class ScoreView(generics.RetrieveAPIView):
             message = "INVALID AUTH_KEY ERROR"
             return Response({"message": message}, status=status.HTTP_400_BAD_REQUEST)
 
-        if s.status != SERVER_STATUS.finished:
-            score = 0.0
-        else:
-            score = s.score
-
-        response = {"score": score}
-        return Response(response, status=status.HTTP_200_OK)
+        return Response({"score": s.score}, status=status.HTTP_200_OK)
