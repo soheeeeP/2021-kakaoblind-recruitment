@@ -39,8 +39,8 @@ class KakaoTScheduler(object):
         self.total_req_count = 0            # 자전거 대여 전체 요청 (트럭 이동 유무와 관계 없는 값, 하나의 시나리오에 대하여 고정된 값을 가짐)
         self.failed_req_count = 0           # 자전거 대여 실패 요청 (트럭 이동 유무에 따라 달라지는 값)
 
-        self.truck_mode = False
-        self.truck_cnt = 0
+        self.truck_mode = False             # 트럭 명령 수행 여부(False, True)
+        self.truck_cnt = 0                  # 트럭 수
         self.truck_problem = None
         self.truck_runtime = 0
         self.truck_rental = None
@@ -52,22 +52,36 @@ class KakaoTScheduler(object):
         self.total_truck_movement_dist = 0  # 트럭이 쉬지 않고 달린다고 가정할 때의 거리의 합
         self.actual_truck_movement_dist = 0 # 트럭 이동 거리
 
-        self.score = 0.0
+        self.score = 0.0                    # 시뮬레이션 수행 점수
 
     def __del__(self):
         self.terminate_scheduler()
 
     def terminate_scheduler(self):
+        """
+        scheduler가 실행되고 있다면, 종료한다
+        :return: None
+        """
         if self.scheduler.running:
             self.scheduler.shutdown()
 
     def init_scheduler(self, problem, truck_problem, scenario):
+        """
+        scheduler 작동을 시작한다
+        :param problem: 서버 시나리오 object (트럭이동이 없는 경우)
+        :param truck_problem: 서버 시나리오 dummy object (트럭이 이동하는 경우)
+        :param scenario: 서버 시나리오 idx
+        """
         self.problem = problem
         self.truck_problem = truck_problem
         self.scenario = scenario
         self.scheduler.start()
 
     def set_server_status_scheduler(self):
+        """
+        성공한 Simulate 요청의 갯수를 확인한다.
+        720번 이상 성공한 경우, 서버의 상태를 finished로 변경하고 총점을 반영한다
+        """
         # 서버가 수행한 simulate 요청이 720번 성공한 경우, 서버의 상태를 finished로 변경
         if self.total_req_count - self.failed_req_count >= 720:
             self.server_status = SERVER_STATUS.finished
@@ -76,6 +90,9 @@ class KakaoTScheduler(object):
             self.calc_server_score()
 
     def calc_server_score(self):
+        """
+        서버 시뮬레이션 수행 점수를 계산한 뒤, 반영한다
+        """
         S = self.total_req_count  # 사용자의 총 대여 요청 수
         _S = self.total_req_count - self.failed_req_count  # 트럭이 아무것도 안했을 때 시나리오에서 성공하는 요청 수
         x = self.truck_total_req_count - self.truck_failed_req_count  # 트럭이 이동할 때 시나리오에서 성공하는 요청 수
@@ -98,6 +115,9 @@ class KakaoTScheduler(object):
         self.problem.score.save()
 
     def add_server_status_scheduler(self):
+        """
+        서버 상태를 확인하는 scheduler를 job에 추가한다
+        """
         _settings = getattr(settings, 'problem')[str(self.problem.idx)]
         self.truck_cnt = _settings['truck']     # 트럭 수
         self.size = _settings['size']           # 대여소의 크기
@@ -105,6 +125,11 @@ class KakaoTScheduler(object):
         self.scheduler.add_job(self.set_server_status_scheduler, "cron", second="*/10", id="server_status")
 
     def add_scheduler(self, rental):
+        """
+        자전거 대여 요청을 처리하는 scheduler를 job에 추가한다
+        트럭을 운행하지 않는 경우, 트럭을 운행하는 경우의 scheduler를 별도로 사용한다
+        :param rental: 자전거 대여 요청 정보
+        """
         import time
         time.sleep(1)
 
@@ -115,12 +140,23 @@ class KakaoTScheduler(object):
         self.truck_rental = self.rental
         self.scheduler.add_job(self.jordy_version_scheduler, "cron", second="*/10", id="jordy")
 
-    def add_truck_scheduler(self, commands):
+    def add_truck_command_scheduler(self, commands):
+        """
+        트럭 명령을 수행하는 scheduler를 job에 추가한다
+        :param commands: 트럭 이동 명령어열
+        """
         # 트럭이 행할 명령(현재 시각 ~ 현재 시각+1분)이 들어오는 경우, 함수로 요청 수행
         self.commands = commands
-        self.scheduler.add_job(self.truck_scheduler, "cron", second="*/1", id="movement")
+        self.scheduler.add_job(self.truck_command_scheduler, "cron", second="*/1", id="movement")
 
     def default_scheduler(self):
+        """
+        트럭을 운행하지 않는 경우의 자전거 대여 요청을 처리한다
+
+        1. 서버 내부에 기록되어 있는 자전거 반납 예정 Hash(self.back)을 확인하여 각 자전거 대여소가 가지고 있는 자전거 수를 늘린다.
+        2. 서버 내부에 기록되어 있는 자전거 대여 예정 Hash(self.rental)을 확인하여 각 자전거 대여소가 가진 자전거 수를 줄인다.
+        3. 서버 실행 시간을 업데이트한다.
+        """
         loc_set = self.problem.location_set.all()
 
         print("============ DEFAULT SCHEDULER ============")
@@ -179,6 +215,13 @@ class KakaoTScheduler(object):
         print("============ DEFAULT END ============")
 
     def jordy_version_scheduler(self):
+        """
+        트럭을 운행하는 경우의 자전거 대여 요청을 처리한다
+
+        1. 서버 내부에 기록되어 있는 자전거 반납 예정 Hash(self.truck_back)을 확인하여 각 자전거 대여소가 가지고 있는 자전거 수를 늘린다.
+        2. 서버 내부에 기록되어 있는 자전거 대여 예정 Hash(self.truck_rental)을 확인하여 각 자전거 대여소가 가진 자전거 수를 줄인다.
+        3. 서버 실행 시간을 업데이트한다.
+        """
         loc_set = self.truck_problem.location_set.all()
 
         print("============ JORDY SCHEDULER ============")
@@ -236,7 +279,17 @@ class KakaoTScheduler(object):
         print("트럭이 이동했을 때 시나리오에서 성공하는 요청 수:" + str(self.truck_total_req_count - self.truck_failed_req_count))
         print("============ JORDY END ============")
 
-    def truck_scheduler(self):
+    def truck_command_scheduler(self):
+        """
+        트럭 이동 명령을 수행한다
+
+        0. 명령어열이 비어있는 경우에는 함수를 수행하지 않고 종료한다
+        1. ID가 낮은 트럭 순으로 정렬한다
+        2. 트럭의 현재 위치를 확인하고, 명령을 수행하며 이동거리를 계산한다.
+            - 1분(60초) 내에 수행할 수 있는 명령만 수행한다
+            - '자전거 상차', '자전거 하차': 트럭이 가진 자전거 수를 증가 또는 감소시킨다
+            - '상/하/좌/우': 트럭의 이동거리를 100m 증가시키고, 트럭의 위치를 기록한다
+        """
         if self.commands is None:
             return
 
@@ -297,6 +350,15 @@ class KakaoTScheduler(object):
         return Response(response, status=status.HTTP_200_OK)
 
     def truck_movement(self, size=None, t_loc_idx=None, t_row=None, t_col=None, command=None):
+        """
+        격자 내에서 트럭의 이동가능 여부를 판단하고, 이동 위치(row, col, 대여소 ID)를 반환한다
+        :param size: 서비스 지역의 크기
+        :param t_loc_idx: 트럭이 현재 위치하고 있는 대여소 ID
+        :param t_row: 트럭이 현재 위치하고 있는 격자의 row
+        :param t_col: 트럭이 현재 위치하고 있는 격자의 col
+        :param command: 트럭 이동 명령
+        :return: 트럭의 현재 위치를 반환
+        """
         # 위로 한 칸 이동
         if command == 1 and 1 <= t_row - 1 <= size:
             self.actual_truck_movement_dist += 100

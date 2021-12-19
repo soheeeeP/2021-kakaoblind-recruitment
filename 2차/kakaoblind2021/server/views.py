@@ -70,7 +70,7 @@ class SimulateView(generics.CreateAPIView):
 
         commands = request.POST.get('commands', None)
         if commands:    # 트럭 이동 요청이 들어온 경우
-            kakao.add_truck_scheduler(commands=json.loads(commands))
+            kakao.add_truck_command_scheduler(commands=json.loads(commands))
 
         response = {
             "status": kakao.server_status,
