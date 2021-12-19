@@ -74,8 +74,8 @@ class SimulateView(generics.CreateAPIView):
 
         response = {
             "status": kakao.server_status,
-            "time": kakao.runtime,
-            "failed_requests_count": kakao.failed_req_count,
+            "time": kakao.truck_runtime,
+            "failed_requests_count": kakao.truck_failed_req_count,
             "distance": kakao.actual_truck_movement_dist
         }
         return Response(response, status=status.HTTP_200_OK)

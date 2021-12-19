@@ -105,6 +105,9 @@ class KakaoTScheduler(object):
         self.scheduler.add_job(self.set_server_status_scheduler, "cron", second="*/10", id="server_status")
 
     def add_scheduler(self, rental):
+        import time
+        time.sleep(1)
+
         self.rental = rental
         self.scheduler.add_job(self.default_scheduler, "cron", second="*/10", id="default")
 
@@ -115,7 +118,7 @@ class KakaoTScheduler(object):
     def add_truck_scheduler(self, commands):
         # 트럭이 행할 명령(현재 시각 ~ 현재 시각+1분)이 들어오는 경우, 함수로 요청 수행
         self.commands = commands
-        self.truck_scheduler()
+        self.scheduler.add_job(self.truck_scheduler, "cron", second="*/1", id="movement")
 
     def default_scheduler(self):
         loc_set = self.problem.location_set.all()
@@ -234,6 +237,9 @@ class KakaoTScheduler(object):
         print("============ JORDY END ============")
 
     def truck_scheduler(self):
+        if self.commands is None:
+            return
+
         truck_set = self.problem.truck_set.all()
         # ID가 낮은 트럭의 명령순으로 정렬
         c_queue = sorted(self.commands, key=lambda x: x['truck_id'])
