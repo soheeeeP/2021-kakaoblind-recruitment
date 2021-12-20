@@ -1,42 +1,23 @@
 # https://programmers.co.kr/learn/courses/30/lessons/72413
 # 2021 KAKAO BLIND RECRUITMENT 합승 택시 요금
 
-import sys
-from collections import deque
-
-
 def solution(n, s, a, b, fares):
-    path = [[0] * (n + 1) for _ in range(n + 1)]
+    path = [[10000001] * (n + 1) for _ in range(n + 1)]
+    path[0][0] = 0
+    for i in range(1, n + 1):
+        path[i][i], path[0][i], path[i][0] = 0, 0, 0
     for f in fares:
         path[f[0]][f[1]], path[f[1]][f[0]] = f[2], f[2]
 
-    shortest = [[sys.maxsize] * (n + 1) for _ in range(n + 1)]
-    shortest[0][0] = 0
-    for i in range(1, n + 1):
-        shortest[i][i], shortest[0][i], shortest[i][0] = 0, 0, 0
+    # 플로이드-와샬(Floyd-Warshall) 적용하여 단순화
+    for k in range(1, n + 1):
+        for i in range(1, n + 1):
+            for j in range(1, n + 1):
+                path[i][j] = min(path[i][j], path[i][k] + path[k][j])
 
+    answer = 10000001
     for idx in range(1, n + 1):
-        q = deque()
-        for i, x in enumerate(path[idx]):
-            if x != 0:
-                q.append(i)
-                shortest[idx][i] = x
-
-        visited = [0] * (n + 1)
-        visited[0], visited[idx] = 1, 1
-        while q:
-            v = q.popleft()
-            visited[v] = 1
-            for i, x in enumerate(path[v]):
-                if x == 0:
-                    continue
-                shortest[idx][i] = min(shortest[idx][v] + x, shortest[idx][i])
-                if i != s and i not in q and visited[i] == 0:
-                    q.append(i)
-
-    answer = sys.maxsize
-    for idx in range(1, n + 1):
-        answer = min(answer, shortest[s][idx] + shortest[idx][a] + shortest[idx][b])
+        answer = min(answer, path[s][idx] + path[idx][a] + path[idx][b])
 
     return answer
 
